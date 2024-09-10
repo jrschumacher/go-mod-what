@@ -9,6 +9,8 @@ import (
 	"golang.org/x/mod/modfile"
 )
 
+var Version = "v0.0.0"
+
 func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options] <package> [<package> ...]\n\n", os.Args[0])
@@ -18,10 +20,16 @@ func main() {
 
 	modfilePath := flag.String("modfile", "./go.mod", "path to go.mod file")
 	help := flag.Bool("help", false, "show help")
+	version := flag.Bool("version", false, "show version")
 	flag.Parse()
 
 	if *help {
 		flag.Usage()
+		return
+	}
+
+	if *version {
+		fmt.Fprintf(os.Stdout, Version+"\n")
 		return
 	}
 
