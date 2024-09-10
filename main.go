@@ -61,7 +61,7 @@ func main() {
 	}
 
 	if *version {
-		fmt.Fprintf(os.Stdout, Version+"\n")
+		fmt.Fprint(os.Stdout, Version+"\n")
 		return
 	}
 
@@ -134,7 +134,7 @@ func printUsage(w io.Writer) func() {
 // printError prints an error message and exits
 func printError(s string, err error, with ...bool) {
 	if err == nil {
-		fmt.Fprintf(os.Stderr, s+"\n\n")
+		fmt.Fprint(os.Stderr, s+"\n\n")
 	} else {
 		fmt.Fprintf(os.Stderr, s+": %s\n\n", err)
 	}

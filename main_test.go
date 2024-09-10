@@ -85,7 +85,10 @@ func TestMainFunction(t *testing.T) {
 
 			// Write modfile content if provided
 			if tt.modfile != "" {
-				os.WriteFile("testdata/go.mod", []byte(tt.modfile), 0644)
+				err := os.WriteFile("testdata/go.mod", []byte(tt.modfile), 0644)
+				if err != nil {
+					t.Fatal(err)
+				}
 				defer os.Remove("testdata/go.mod")
 			}
 
@@ -104,8 +107,12 @@ func TestMainFunction(t *testing.T) {
 			wOut.Close()
 			wErr.Close()
 			var bufOut, bufErr bytes.Buffer
-			bufOut.ReadFrom(rOut)
-			bufErr.ReadFrom(rErr)
+			if _, err := bufOut.ReadFrom(rOut); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := bufErr.ReadFrom(rErr); err != nil {
+				t.Fatal(err)
+			}
 
 			// Check stdout
 			if gotOut := bufOut.String(); !strings.Contains(gotOut, tt.wantOut) {
@@ -186,7 +193,9 @@ func TestPrintError(t *testing.T) {
 			// Close the writer and read the captured output
 			w.Close()
 			var buf bytes.Buffer
-			buf.ReadFrom(r)
+			if _, err := buf.ReadFrom(r); err != nil {
+				t.Fatal(err)
+			}
 
 			// Check if the output matches the expected output
 			if got := buf.String(); got != tt.want {
