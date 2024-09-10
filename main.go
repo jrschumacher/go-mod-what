@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strings"
 
 	"golang.org/x/mod/modfile"
 )
@@ -18,6 +19,7 @@ func main() {
 
 	modfilePath := flag.String("modfile", "./go.mod", "path to go.mod file")
 	help := flag.Bool("help", false, "show help")
+	onlyVersion := flag.Bool("only-version", false, "only print the version")
 	flag.Parse()
 
 	if *help {
@@ -26,13 +28,7 @@ func main() {
 	}
 
 	if *modfilePath == "" {
-		printError("go.mod file not provided", nil)
-		return
-	}
-
-	if flag.NArg() < 1 {
-		printError("package name not provided", nil)
-		return
+		printError("go.mod file not provided", nil, true)
 	}
 
 	// try stating to see if it's a directory
@@ -59,27 +55,55 @@ func main() {
 		printError("failed to parse go.mod file", err)
 	}
 
-	found := false
-	for _, p := range flag.Args() {
-		for _, r := range m.Require {
-			if r.Mod.Path == p {
-				found = true
-				fmt.Fprintf(os.Stdout, "%s %s\n", r.Mod.Path, r.Mod.Version)
+	found := make([]bool, len(flag.Args()))
+	for _, r := range m.Require {
+		for i, p := range flag.Args() {
+			if !compareRequire(p, r.Mod.Path) {
+				continue
 			}
+
+			found[i] = true
+			modPath := r.Mod.Path + " "
+			if *onlyVersion {
+				modPath = ""
+			}
+			fmt.Fprintln(os.Stdout, modPath+r.Mod.Version)
 		}
 	}
 
-	if !found {
-		printError("module not found", nil)
+	for i, f := range found {
+		if !f {
+			fmt.Fprintf(os.Stderr, "%s not found\n", flag.Args()[i])
+		}
 	}
 }
 
-func printError(s string, err error) {
+// compareRequire compares module path with a string
+func compareRequire(a string, b string) bool {
+	// exact match
+	if strings.Compare(a, b) == 0 {
+		return true
+	}
+
+	// wildcard
+	if strings.Contains(a, "*") && strings.HasPrefix(b, strings.TrimSuffix(a, "*")) {
+		return true
+	}
+
+	return false
+}
+
+// printError prints an error message and exits
+func printError(s string, err error, with ...bool) {
 	if err == nil {
 		fmt.Fprintf(os.Stderr, s+"\n\n")
 	} else {
 		fmt.Fprintf(os.Stderr, s+": %s\n\n", err)
 	}
-	flag.Usage()
+
+	if len(with) > 0 && with[0] {
+		flag.Usage()
+	}
+
 	os.Exit(1)
 }
