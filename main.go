@@ -3,8 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
-	"path"
 	"strings"
 
 	"golang.org/x/mod/modfile"
@@ -46,39 +46,23 @@ EXAMPLES
 `
 
 func main() {
-	flag.Usage = func() {
-		fmt.Fprint(os.Stderr, usage)
-
-		flag.PrintDefaults()
-
-		fmt.Fprint(os.Stderr, usageExample)
-	}
-
 	modfilePath := flag.String("modfile", "./go.mod", "path to go.mod file")
 	help := flag.Bool("help", false, "show help")
 	onlyVersion := flag.Bool("only-version", false, "only print the version")
 	flag.Parse()
 
 	if *help {
+		flag.Usage = printUsage(os.Stdout)
 		flag.Usage()
 		return
 	}
 
-	if *modfilePath == "" {
-		printError("go.mod file not provided", nil, true)
+	if len(flag.Args()) == 0 {
+		printError("no package provided", nil, true)
 	}
 
-	// try stating to see if it's a directory
-	if path.Base(*modfilePath) != "go.mod" {
-		if fi, err := os.Stat(*modfilePath); err == nil && fi.IsDir() {
-			*modfilePath = path.Join(*modfilePath, "go.mod")
-		} else {
-			if err != nil {
-				printError("could not stat go.mod file", err)
-			} else {
-				printError("invalid go.mod file", nil)
-			}
-		}
+	if *modfilePath == "" {
+		printError("go.mod file not provided", nil, true)
 	}
 
 	b, err := os.ReadFile(*modfilePath)
@@ -130,6 +114,15 @@ func compareRequire(a string, b string) bool {
 	return false
 }
 
+func printUsage(w io.Writer) func() {
+	return func() {
+		flag.CommandLine.SetOutput(w)
+		fmt.Fprint(w, usage)
+		flag.PrintDefaults()
+		fmt.Fprint(w, usageExample)
+	}
+}
+
 // printError prints an error message and exits
 func printError(s string, err error, with ...bool) {
 	if err == nil {
@@ -139,8 +132,15 @@ func printError(s string, err error, with ...bool) {
 	}
 
 	if len(with) > 0 && with[0] {
+		flag.Usage = printUsage(os.Stderr)
 		flag.Usage()
 	}
 
+	// panic if in test mode to simulate os.Exit
+	if os.Getenv("TEST_MODE") == "true" {
+		panic(s)
+	}
+
+	// exit with status 1
 	os.Exit(1)
 }
