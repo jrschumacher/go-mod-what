@@ -18,6 +18,8 @@ Usage: go-mod-what [options] <package> [<package> ...]
         show help
   -modfile string
         path to go.mod file (default "./go.mod")
+  -only-version
+        only print the version
 ```
 
 This will output the module and version of the package `golang.org/x/mod v0.21.0` within the `go.mod` file.
