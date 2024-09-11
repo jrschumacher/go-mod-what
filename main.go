@@ -47,6 +47,11 @@ EXAMPLES
       v1.8.0
 `
 
+type Package struct {
+	Path    string
+	Version string
+}
+
 func main() {
 	modfilePath := flag.String("modfile", "./go.mod", "path to go.mod file")
 	help := flag.Bool("help", false, "show help")
@@ -84,27 +89,39 @@ func main() {
 		printError("failed to parse go.mod file", err)
 	}
 
-	found := make([]bool, len(flag.Args()))
+	pkgs := flag.Args()
+	pkgVers, pkgFound := findPackages(m, pkgs)
+
+	for _, p := range pkgVers {
+		if *onlyVersion {
+			fmt.Fprintln(os.Stdout, p.Version)
+			continue
+		}
+		fmt.Fprintln(os.Stdout, p.Path+" "+p.Version)
+	}
+
+	for i, f := range pkgFound {
+		if !f {
+			fmt.Fprintf(os.Stderr, "%s not found\n", pkgs[i])
+		}
+	}
+}
+
+func findPackages(m *modfile.File, pkgs []string) ([]Package, []bool) {
+	var pkgVers []Package
+	pkgFound := make([]bool, len(pkgs))
 	for _, r := range m.Require {
-		for i, p := range flag.Args() {
+		for i, p := range pkgs {
 			if !compareRequire(p, r.Mod.Path) {
 				continue
 			}
 
-			found[i] = true
-			modPath := r.Mod.Path + " "
-			if *onlyVersion {
-				modPath = ""
-			}
-			fmt.Fprintln(os.Stdout, modPath+r.Mod.Version)
+			pkgVers = append(pkgVers, Package{Path: r.Mod.Path, Version: r.Mod.Version})
+			pkgFound[i] = true
 		}
 	}
 
-	for i, f := range found {
-		if !f {
-			fmt.Fprintf(os.Stderr, "%s not found\n", flag.Args()[i])
-		}
-	}
+	return pkgVers, pkgFound
 }
 
 // compareRequire compares module path with a string

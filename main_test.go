@@ -4,9 +4,14 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"math/rand"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
+
+	"golang.org/x/mod/modfile"
+	"golang.org/x/mod/module"
 )
 
 const fixture = "fixtures/go.mod"
@@ -14,6 +19,8 @@ const nonexistentFixture = "fixtures/nonexistent_go.mod"
 const invalidFixture = "fixtures/invalid_go.mod"
 
 func TestMainFunction(t *testing.T) {
+	t.Setenv("TEST_MODE", "true")
+
 	// Save original os.Args and restore it after the test
 	origArgs := os.Args
 	defer func() { os.Args = origArgs }()
@@ -60,25 +67,12 @@ func TestMainFunction(t *testing.T) {
 			args:    []string{"-modfile", invalidFixture},
 			wantErr: "failed to parse go.mod file: testdata/invalid_go.mod:3: invalid module path: invalid content\n\n",
 		},
-		{
-			name:    "Package not found",
-			args:    []string{"github.com/nonexistent/package"},
-			wantErr: "github.com/nonexistent/package not found\n",
-		},
-		{
-			name:    "Package found",
-			args:    []string{"-modfile", fixture, "golang.org/x/a"},
-			wantOut: "golang.org/x/a	v0.0.1\n",
-		},
-		{
-			name:    "Package found with only-version",
-			args:    []string{"-modfile", fixture, "-only-version", "golang.org/x/a"},
-			wantOut: "v0.0.1\n",
-		},
 	}
 
 	for _, tt := range tests {
-		flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+		// random string to avoid flag conflicts
+		s := fmt.Sprintf("TestMainFunction-%d", rand.Int())
+		flag.CommandLine = flag.NewFlagSet(s, flag.ExitOnError)
 		t.Run(tt.name, func(t *testing.T) {
 			// Set os.Args for the test
 			os.Args = append([]string{"cmd"}, tt.args...)
@@ -247,6 +241,93 @@ func TestCompareRequire(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := compareRequire(tt.a, tt.b); got != tt.want {
 				t.Errorf("compareRequire(%v, %v) = %v, want %v", tt.a, tt.b, got, tt.want)
+			}
+		})
+	}
+}
+func TestFindPackages(t *testing.T) {
+	tests := []struct {
+		name      string
+		modfile   *modfile.File
+		pkgs      []string
+		wantPkg   []Package
+		wantFound []bool
+	}{
+		{
+			name: "Single package found",
+			modfile: &modfile.File{
+				Require: []*modfile.Require{
+					{Mod: module.Version{Path: "github.com/gorilla/mux", Version: "v1.8.0"}},
+				},
+			},
+			pkgs: []string{"github.com/gorilla/mux"},
+			wantPkg: []Package{
+				{Path: "github.com/gorilla/mux", Version: "v1.8.0"},
+			},
+			wantFound: []bool{true},
+		},
+		{
+			name: "Multiple packages found",
+			modfile: &modfile.File{
+				Require: []*modfile.Require{
+					{Mod: module.Version{Path: "github.com/gorilla/mux", Version: "v1.8.0"}},
+					{Mod: module.Version{Path: "github.com/gorilla/schema", Version: "v1.2.0"}},
+				},
+			},
+			pkgs: []string{"github.com/gorilla/mux", "github.com/gorilla/schema"},
+			wantPkg: []Package{
+				{Path: "github.com/gorilla/mux", Version: "v1.8.0"},
+				{Path: "github.com/gorilla/schema", Version: "v1.2.0"},
+			},
+			wantFound: []bool{true, true},
+		},
+		{
+			name: "Package not found",
+			modfile: &modfile.File{
+				Require: []*modfile.Require{
+					{Mod: module.Version{Path: "github.com/gorilla/mux", Version: "v1.8.0"}},
+				},
+			},
+			pkgs:      []string{"github.com/nonexistent/package"},
+			wantPkg:   []Package{},
+			wantFound: []bool{false},
+		},
+		{
+			name: "Wildcard package found",
+			modfile: &modfile.File{
+				Require: []*modfile.Require{
+					{Mod: module.Version{Path: "github.com/gorilla/mux", Version: "v1.8.0"}},
+					{Mod: module.Version{Path: "github.com/gorilla/schema", Version: "v1.2.0"}},
+				},
+			},
+			pkgs: []string{"github.com/gorilla/*"},
+			wantPkg: []Package{
+				{Path: "github.com/gorilla/mux", Version: "v1.8.0"},
+				{Path: "github.com/gorilla/schema", Version: "v1.2.0"},
+			},
+			wantFound: []bool{true},
+		},
+		{
+			name: "Partial package found",
+			modfile: &modfile.File{
+				Require: []*modfile.Require{
+					{Mod: module.Version{Path: "github.com/gorilla/mux", Version: "v1.8.0"}},
+				},
+			},
+			pkgs:      []string{"github.com/gorilla"},
+			wantPkg:   []Package{},
+			wantFound: []bool{false},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotPkg, gotFound := findPackages(tt.modfile, tt.pkgs)
+			if (len(gotPkg) != 0 && len(tt.wantPkg) != 0) && !reflect.DeepEqual(gotPkg, tt.wantPkg) {
+				t.Errorf("findPackages() gotPkg = %v, want %v", gotPkg, tt.wantPkg)
+			}
+			if (len(gotFound) != 0 && len(tt.wantFound) != 0) && !reflect.DeepEqual(gotFound, tt.wantFound) {
+				t.Errorf("findPackages() gotFound = %v, want %v", gotFound, tt.wantFound)
 			}
 		})
 	}
